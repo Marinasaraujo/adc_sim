@@ -34,10 +34,13 @@
 
 #define SAMPLING_PERIOD_US      10000U  // Período de amostragem (10 ms → 100 Hz)
 
+volatile int g_ADC_Channel_Threshold = 3000;
+
 // --- Enumeração para o Estado do Canal ADC ---
 typedef enum {
     ADC_CHANNEL_STATE_DISABLED,
-    ADC_CHANNEL_STATE_NORMAL
+    ADC_CHANNEL_STATE_NORMAL,
+    ADC_CHANNEL_STATE_ALERT
 } AdcChannelState_t;
 
 // --- Estrutura (Struct) para o Canal ADC ---
@@ -115,7 +118,9 @@ void processAdcChannel(AdcChannel_t *pChannel)
     pChannel->filteredVoltage = convertADCToVoltage(pChannel->filteredValueADC);
 
     //5. Aqui deverá ser incluída a lógica de detecção de limiar excedido
-    pChannel->state = ADC_CHANNEL_STATE_NORMAL;
+    if (pChannel->filteredValueADC > g_ADC_Channel_Threshold){
+        pChannel->state = ADC_CHANNEL_STATE_ALERT;
+    }
 
 }
 
@@ -149,6 +154,11 @@ void addSampleToBuffer(AdcChannel_t *pChannel, unsigned int newSample)
 {
     pChannel->buffer[pChannel->currentIndex] = newSample;
     pChannel->currentIndex = (pChannel->currentIndex + 1U) % FILTER_BUFFER_SIZE;
+    
+    if (pChannel->currentIndex == 0U) {
+        pChannel->state = ADC_CHANNEL_STATE_NORMAL; // Resetar o estado do canal quando o controle do buffer reiniciar
+    }
+
 }
 
 // Calcula a média móvel das amostras no buffer.
@@ -159,6 +169,7 @@ void calculateMovingAverage(AdcChannel_t *pChannel)
     {
         sum = sum + pChannel->buffer[i];
     }
+
     // Arredondamento simples
     pChannel->filteredValueADC = (unsigned int)((sum + FILTER_BUFFER_SIZE / 2U) / FILTER_BUFFER_SIZE);
 
@@ -167,6 +178,7 @@ void calculateMovingAverage(AdcChannel_t *pChannel)
     {
         pChannel->filteredValueADC = ADC_MAX_VALUE;
     }
+
 }
 
 // Converte um valor ADC (0 a 4095) para tensão (0 a 3.3 V).
